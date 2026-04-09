@@ -19,8 +19,7 @@ const rooms = {};
 console.log('Signaling server starting...');
 
 io.on('connection', (socket) => {
-    console.log('New connection:', socket.id,
-        'transport:', socket.conn.transport.name);
+    console.log('New connection:', socket.id);
 
     socket.on('register', (data) => {
         const { uid, role, type = 'camera' } = data;
@@ -52,10 +51,10 @@ io.on('connection', (socket) => {
             if (child) {
                 child.emit('request-stream', { type });
                 socket.emit('child-online', { uid, type });
-                console.log(`Parent joined — child already here uid=${uid} type=${type}`);
+                console.log(`Parent joined — child here uid=${uid} type=${type}`);
             } else {
                 socket.emit('child-offline', { uid, type });
-                console.log(`Parent joined — child not here yet uid=${uid} type=${type}`);
+                console.log(`Parent joined — no child uid=${uid} type=${type}`);
             }
         }
     });
@@ -66,9 +65,7 @@ io.on('connection', (socket) => {
         const parent = rooms[uid]?.[type]?.parent;
         if (parent) {
             parent.emit('offer', data);
-            console.log(`Offer forwarded to parent uid=${uid} type=${type}`);
-        } else {
-            console.log(`No parent for offer uid=${uid} type=${type}`);
+            console.log(`Offer forwarded uid=${uid} type=${type}`);
         }
     });
 
@@ -78,7 +75,7 @@ io.on('connection', (socket) => {
         const child = rooms[uid]?.[type]?.child;
         if (child) {
             child.emit('answer', data);
-            console.log(`Answer forwarded to child uid=${uid} type=${type}`);
+            console.log(`Answer forwarded uid=${uid} type=${type}`);
         }
     });
 
@@ -89,10 +86,8 @@ io.on('connection', (socket) => {
 
         if (socket.role === 'child') {
             room.parent?.emit('ice-candidate', data);
-            console.log(`ICE child→parent uid=${uid} type=${type}`);
         } else {
             room.child?.emit('ice-candidate', data);
-            console.log(`ICE parent→child uid=${uid} type=${type}`);
         }
     });
 
@@ -117,23 +112,25 @@ io.on('connection', (socket) => {
     });
 });
 
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
-    res.json({ status: 'running', message: 'Signaling server online' });
+    res.send('Signaling server is running');
 });
 
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', rooms: Object.keys(rooms).length });
+});
+
+// ── Keep alive (prevents Render free tier sleep) ──────────────────────────────
+const RENDER_URL = 'https://signaling-server-pp32.onrender.com';
+setInterval(() => {
+    http.get(RENDER_URL, (res) => {
+        console.log(`Keep-alive: ${res.statusCode}`);
+    }).on('error', () => {});
+}, 10 * 60 * 1000);
+
+// ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n✓ Signaling server running on port ${PORT}`);
-    console.log(`✓ Visit http://localhost:${PORT}\n`);
+    console.log(`✓ Signaling server running on port ${PORT}`);
 });
-
-const https = require('https');
-const RENDER_URL = 'https://signaling-server.onrender.com';
-
-setInterval(() => {
-    https.get(RENDER_URL, (res) => {
-        console.log(`Keep-alive ping: ${res.statusCode}`);
-    }).on('error', (e) => {
-        console.log(`Keep-alive error: ${e.message}`);
-    });
-}, 10 * 60 * 1000); 
